@@ -6,8 +6,16 @@ from src.database import Base, engine, get_db
 from src.models import Node
 from src.schemas import NodeCreate, NodeResponse, NodeUpdate
 
+import src.election as election
+import threading
+
 Base.metadata.create_all(bind=engine)
 app = FastAPI()
+
+@app.on_event("startup")
+def thread_heartbeat():
+    t = threading.Thread(target= election.heartbeat_check, daemon= True)
+    t.start()
 
 @app.get("/health")
 def health(db: Session = Depends(get_db)):
@@ -64,3 +72,32 @@ def delete_node(name: str, db: Session = Depends(get_db)):
     node.updated_at = datetime.now(timezone.utc)
     db.commit()
     return Response(status_code=204)
+
+#########################
+
+
+@app.post("/election")
+def handle_election_message(payload: dict):
+    sender_id = payload.get("sender_id")
+    election.logger.info(f"{election.NODE_ID} Recive ELECTION from Node {sender_id}")
+
+    if sender_id is None:
+        raise Response(status_code= 400)
+    is_valid_election = election.handle_election_message(sender_id)
+    if is_valid_election:
+        return {"status":"OK"}
+    
+    return Response(status_code= 400)
+
+@app.post("/coordinator")
+def handle_coodinator_message(payload: dict):
+    leader_id = payload.get("leader_id")
+    election.current_leader = leader_id
+    election.is_election_in_progress = False
+    election.heartbeat_timeout_count = 0
+    election.logger.info(f"{election.NODE_ID}: New leader -> Node {leader_id}")
+    return {"status": "Ack"}
+
+@app.get("/heartbeat")
+def hearthbea():
+    return {"status":"Alive"}
