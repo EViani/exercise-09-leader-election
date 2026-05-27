@@ -101,3 +101,7 @@ def handle_coodinator_message(payload: dict):
 @app.get("/heartbeat")
 def hearthbea():
     return {"status":"Alive"}
+
+@app.get("/leader")
+def get_current_leader():
+    return {"leader_id": election.current_leader, "hostname":f"node-{election.current_leader}"}
